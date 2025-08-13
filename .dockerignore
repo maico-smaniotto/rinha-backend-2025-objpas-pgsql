@@ -1,0 +1,50 @@
+# Arquivos de build em todas as pastas
+*.o
+*.ppu
+*.compiled
+*.or
+*.a
+*.so
+*.dylib
+*.exe
+src/*.o
+src/*.ppu
+src/*.compiled
+lib/
+
+# Arquivos de backup e temporários
+*~
+*.bak
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# Arquivos de IDE
+*.lps
+*.session
+backup/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Build tools
+Makefile
+
+# Logs
+*.log
+logs/
+
+# Documentação
+*.md
+docs/
+
+# Testes
+test/
+tests/
