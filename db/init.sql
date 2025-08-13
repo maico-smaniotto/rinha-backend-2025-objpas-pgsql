@@ -1,5 +1,5 @@
 create table payments (
-    correlation_id uuid primary key,
+    correlation_id varchar(36) primary key,
     amount decimal(15,2) not null,
     processed_at timestamp not null,
     default_processor boolean not null
