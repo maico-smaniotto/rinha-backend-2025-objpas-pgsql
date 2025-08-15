@@ -11,6 +11,7 @@ src/*.o
 src/*.ppu
 src/*.compiled
 lib/
+Payments
 
 # Arquivos de backup e temporários
 *~
