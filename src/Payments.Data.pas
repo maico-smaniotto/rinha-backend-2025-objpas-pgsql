@@ -7,7 +7,8 @@ interface
 
 uses
   Classes,
-  SysUtils;
+  SysUtils,
+  Payments.Utils;
 
 type
   TPayment = record
@@ -17,6 +18,8 @@ type
 
   TPaymentHelper = type helper for TPayment
     class function FromJson(AContent: String): TPayment; static;
+    function ToJson: String; overload;
+    function ToJson(ARequestedAt: TDateTime): String; overload;
   end;
 
 implementation
@@ -48,6 +51,22 @@ begin
   Str := Trim(Str);
 
   Result.Amount := Str.ToDouble;
+end;
+
+function TPaymentHelper.ToJson: String;
+begin
+  Result := Format(
+    '{"correlationId":"%s","amount":%.2f}',
+    [Self.CorrelationId, Self.Amount]
+  );
+end;
+
+function TPaymentHelper.ToJson(ARequestedAt: TDateTime): String;
+begin
+  Result := Format(
+    '{"correlationId":"%s","amount":%.2f,"requestedAt":"%s"}',
+    [Self.CorrelationId, Self.Amount, DateTimeToISO8601(ARequestedAt)]
+  );
 end;
 
 end.

@@ -1,4 +1,4 @@
-create table payments (
+create unlogged table payments (
     correlation_id varchar(36) primary key,
     amount decimal(15,2) not null,
     processed_at timestamp not null,

@@ -10,18 +10,24 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
+  SysUtils,
   Classes,
   Payments.App;
 
 var
   App: TPaymentsApp;
 begin
-  App := TPaymentsApp.Create(nil);
   try
-    App.Initialize;
-    App.Run;
-  finally
-    App.Free;
+    App := TPaymentsApp.Create(nil);
+    try
+      App.Initialize;
+      App.Run;
+    finally
+      App.Free;
+    end;
+  except
+    on E: Exception do
+      WriteLn(E.Message);
   end;
 end.
 

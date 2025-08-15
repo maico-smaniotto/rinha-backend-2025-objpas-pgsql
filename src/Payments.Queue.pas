@@ -8,15 +8,13 @@ uses
   Classes,
   SysUtils,
   SyncObjs,
-  fgl;
+  fgl,
+  Payments.Data;
 
 type
-  TPaymentData = record
-    Content: String;
-  end;
-  PPaymentData = ^TPaymentData;
+  PPayment = ^TPayment;
 
-  TDataList = specialize TFPGList<PPaymentData>;
+  TDataList = specialize TFPGList<PPayment>;
 
   TPaymentQueue = class
   private
@@ -27,14 +25,14 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Enqueue(const AContent: String);
-    function Dequeue: PPaymentData;
-    function DequeueWithTimeout(ATimeoutMs: Integer): PPaymentData;
+    procedure Enqueue(APaymentPtr: PPayment);
+    function Dequeue: PPayment;
+    function DequeueWithTimeout(ATimeoutMs: Integer): PPayment;
     function IsEmpty: Boolean;
     function Count: Integer;
     procedure Shutdown;
     procedure Clear;
-    class procedure FreeQueueData(AData: PPaymentData);
+    class procedure FreeQueueData(APaymentPtr: PPayment);
   end;
 
 implementation
@@ -58,26 +56,21 @@ begin
   inherited Destroy;
 end;
 
-procedure TPaymentQueue.Enqueue(const AContent: String);
-var
-  PaymentData: PPaymentData;
+procedure TPaymentQueue.Enqueue(APaymentPtr: PPayment);
 begin
   FCriticalSection.Acquire;
   try
     if FShutdown then
       Exit;
 
-    New(PaymentData);
-    PaymentData^.Content := AContent;
-
-    FQueue.Add(PaymentData);
+    FQueue.Add(APaymentPtr);
     FWaitEvent.SetEvent;
   finally
     FCriticalSection.Release;
   end;
 end;
 
-function TPaymentQueue.Dequeue: PPaymentData;
+function TPaymentQueue.Dequeue: PPayment;
 begin
   Result := nil;
 
@@ -99,7 +92,7 @@ begin
   end;
 end;
 
-function TPaymentQueue.DequeueWithTimeout(ATimeoutMs: Integer): PPaymentData;
+function TPaymentQueue.DequeueWithTimeout(ATimeoutMs: Integer): PPayment;
 begin
   Result := nil;
 
@@ -162,10 +155,10 @@ begin
   end;
 end;
 
-class procedure TPaymentQueue.FreeQueueData(AData: PPaymentData);
+class procedure TPaymentQueue.FreeQueueData(APaymentPtr: PPayment);
 begin
-  if Assigned(AData) then
-    Dispose(AData);
+  if Assigned(APaymentPtr) then
+    Dispose(APaymentPtr);
 end;
 
 end.

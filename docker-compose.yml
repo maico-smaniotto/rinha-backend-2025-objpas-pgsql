@@ -10,8 +10,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.45"
-          memory: "100MB"
+          cpus: "0.55"
+          memory: "60MB"
 
   api02:
     build: .
@@ -24,8 +24,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.45"
-          memory: "100MB"
+          cpus: "0.55"
+          memory: "60MB"
           
   nginx:
     image: nginx:1.29.0-alpine
@@ -42,8 +42,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.45"
-          memory: "100MB"
+          cpus: "0.2"
+          memory: "50MB"
 
   db:
     image: postgres:17-alpine
@@ -62,8 +62,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.15"
-          memory: "50MB"
+          cpus: "0.2"
+          memory: "180MB"
     networks:
       - backend
      

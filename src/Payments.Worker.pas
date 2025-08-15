@@ -18,7 +18,7 @@ type
     FGiveBackQueue: TPaymentQueue;
     FRepository: TPaymentRepository;
     FIsDefault: Boolean;
-    FUrl: String;
+    FBaseUrl: String;
     FMaxTries: Integer;
   protected
     procedure Execute; override;
@@ -41,33 +41,26 @@ begin
 
   FRepository := TPaymentRepository.Create;
 
-  {$ifopt D+}
   if AIsDefault then
   begin
     FIsDefault := True;
-    FUrl := 'http://localhost:8001';
-    FMaxTries := 50;
+    FMaxTries := 3;
+    {$ifopt D+}
+    FBaseUrl := 'http://localhost:8001';
+    {$else}
+    FBaseUrl := 'http://payment-processor-default:8080';
+    {$endif}
   end
   else
   begin
     FIsDefault := False;
-    FUrl := 'http://localhost:8002';
     FMaxTries := 1;
+    {$ifopt D+}
+    FBaseUrl := 'http://localhost:8002';
+    {$else}
+    FBaseUrl := 'http://payment-processor-fallback:8080';
+    {$endif}
   end;
-  {$else}
-  if AIsDefault then
-  begin
-    FIsDefault := True;
-    FUrl := 'http://payment-processor-default:8080';
-    FMaxTries := 50;
-  end
-  else
-  begin
-    FIsDefault := False;
-    FUrl := 'http://payment-processor-fallback:8080';
-    FMaxTries := 1;
-  end;
-  {$endif}
 end;
 
 destructor TPaymentWorkerThread.Destroy;
@@ -78,61 +71,66 @@ end;
 
 procedure TPaymentWorkerThread.Execute;
 var
-  PaymentData: PPaymentData;
+  PaymentPtr: PPayment;
   Client: TFPHTTPClient;
   Request: String;
-  Payment: TPayment;
   RequestedAt: TDateTime;
   Tries: Integer;
   Success: Boolean;
+  Unavailable: Boolean;
 begin
-  while not Terminated do
-  begin
-    PaymentData := FMyQueue.DequeueWithTimeout(1000);
-    if PaymentData = nil then
+  Unavailable := False;
+  Client := TFPHTTPClient.Create(nil);
+  try
+    Client.AddHeader('Content-Type', 'application/json');
+
+    while not Terminated do
     begin
-      Sleep(100);
-      Continue;
-    end;
+      PaymentPtr := FMyQueue.DequeueWithTimeout(1000);
+      if PaymentPtr = nil then
+      begin
+        Continue;
+      end;
 
-    Payment := TPayment.FromJson(PaymentData^.Content);
-
-    Client := TFPHTTPClient.Create(nil);
-    try
       try
         RequestedAt := Now;
 
-        Request := PaymentData^.Content;
-        Request := Trim(Request);
-        Request := Copy(Request, 1, Length(Request) -1) + ',"requestedAt":"' + FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss".000Z"', RequestedAt) + '"}';
+        Request := PaymentPtr^.ToJson(RequestedAt);
 
-        Client.AddHeader('Content-Type', 'application/json');
-        //Client.RequestBody := TRawByteStringStream.Create(Request);
-        Client.RequestBody := TStringStream.Create(Request);
+        Client.RequestBody := TRawByteStringStream.Create(Request);
 
         Success := False;
         Tries := 0;
         repeat
-          Client.Post(FUrl + '/payments');
           Inc(Tries);
 
-          if Client.ResponseStatusCode = 200 then
-          begin
-            FRepository.SavePayment(Payment, RequestedAt, FIsDefault);
-            Success := True;
-            Break;
-          end;
-        until Tries = FMaxTries;
+          if Unavailable then
+            Sleep(500);
 
-        if not Success then
-          FGiveBackQueue.Enqueue(PaymentData^.Content);
+          FRepository.PrepareSavePayment(PaymentPtr^, RequestedAt, FIsDefault);
+
+          Client.Post(FBaseUrl + '/payments');
+          if (Client.ResponseStatusCode >= 200) and (Client.ResponseStatusCode <= 299) then
+          begin
+            try FRepository.ExecuteSavePayment; except end;
+            Success := True;
+            Unavailable := False;
+            Break;
+          end
+          else
+            Unavailable := True;
+        until Tries >= FMaxTries;
+
+        if Success then
+          TPaymentQueue.FreeQueueData(PaymentPtr)
+        else
+          FGiveBackQueue.Enqueue(PaymentPtr);
       except
-        FGiveBackQueue.Enqueue(PaymentData^.Content);
+        FGiveBackQueue.Enqueue(PaymentPtr);
       end;
-    finally
-      Client.Free;
-      TPaymentQueue.FreeQueueData(PaymentData);
     end;
+  finally
+    Client.Free;
   end;
 end;
 

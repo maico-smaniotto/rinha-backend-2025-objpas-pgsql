@@ -9,7 +9,8 @@ uses
   SysUtils,
   Payments.Queue,
   Payments.Worker,
-  Payments.Repository;
+  Payments.Repository,
+  Payments.Data;
 
 type
   TPaymentService = class
@@ -18,12 +19,12 @@ type
     FDefaultWorker: TPaymentWorkerThread;
     FFallbackQueue: TPaymentQueue;
     FFallbackWorker: TPaymentWorkerThread;
-    FRepository: TPaymentRepository;
   public
     constructor Create; reintroduce;
     destructor Destroy; reintroduce; override;
     procedure EnqueuePayment(AContent: String);
     procedure EnqueuePaymentAsync(AContent: String);
+    procedure DeletePayments;
     function GetSummary(AQuery: String): String;
   end;
 
@@ -75,22 +76,53 @@ begin
   TAsyncProc.Create(@EnqueuePayment, AContent);
 end;
 
+procedure TPaymentService.DeletePayments;
+var
+  Repository: TPaymentRepository;
+begin
+  Repository := TPaymentRepository.Create;
+  try
+    Repository.DeletePayments;
+  finally
+    Repository.Free;
+  end;
+end;
+
 function TPaymentService.GetSummary(AQuery: String): String;
 var
   StartDateTime,
   EndDateTime: TDateTime;
+  Repository: TPaymentRepository;
 begin
-  //Result := '{"default":{"totalRequests":0,"totalAmount":0.0},"fallback":{"totalRequests":0,"totalAmount":0.0}}';
-
   ExtractDateTimeParam(AQuery, 'from', StartDateTime);
   ExtractDateTimeParam(AQuery, 'to', EndDateTime);
 
-  Result := FRepository.GetSummary(StartDateTime, EndDateTime);
+  Repository := TPaymentRepository.Create;
+  try
+    Result := Repository.GetSummary(StartDateTime, EndDateTime);
+  finally
+    Repository.Free;
+  end;
 end;
 
 procedure TPaymentService.EnqueuePayment(AContent: String);
+var
+  PaymentPtr: PPayment;
+  FQueue: TPaymentQueue;
 begin
-  FDefaultQueue.Enqueue(AContent);
+  FQueue := FDefaultQueue;
+
+  if FQueue.Count > 1000 then
+  begin
+    FQueue := FFallbackQueue;
+
+    if FQueue.Count > 200 then
+      Exit;
+  end;
+
+  New(PaymentPtr);
+  PaymentPtr^ := TPayment.FromJson(AContent);
+  FQueue.Enqueue(PaymentPtr);
 end;
 
 constructor TPaymentService.Create;
@@ -99,8 +131,6 @@ begin
 
   FDefaultQueue := TPaymentQueue.Create;
   FFallbackQueue := TPaymentQueue.Create;
-
-  FRepository := TPaymentRepository.Create;
 
   FDefaultWorker := TPaymentWorkerThread.Create(FDefaultQueue, FFallbackQueue, True);
   FFallbackWorker := TPaymentWorkerThread.Create(FFallbackQueue, FDefaultQueue, False);
@@ -121,8 +151,6 @@ begin
 
   FDefaultQueue.Free;
   FFallbackQueue.Free;
-
-  FRepository.Free;
 
   inherited Destroy;
 end;

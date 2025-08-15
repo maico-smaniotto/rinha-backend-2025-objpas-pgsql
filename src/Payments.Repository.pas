@@ -12,7 +12,8 @@ uses
   DateUtils,
   PQConnection,
   SQLDB,
-  Payments.Data;
+  Payments.Data,
+  Payments.Utils;
 
 type
   TPaymentRepository = class
@@ -20,11 +21,17 @@ type
     FConnection: TPQConnection;
     FTransaction: TSQLTransaction;
     FQuery: TSQLQuery;
+    FQryDelete: TSQLQuery;
+
+    FSavePaymentCommand: String;
   public
     constructor Create;
     destructor Destroy; override;
 
-    procedure SavePayment(APayment: TPayment; ARequestedAt: TDateTime; AIsDefault: Boolean);
+    procedure PrepareSavePayment(APayment: TPayment; ARequestedAt: TDateTime; AIsDefault: Boolean);
+    procedure ExecuteSavePayment;
+
+    procedure DeletePayments;
     function GetSummary(AStartDate, AEndDate: TDateTime): string;
   end;
 
@@ -35,9 +42,6 @@ begin
   inherited Create;
 
   FConnection := TPQConnection.Create(nil);
-  FTransaction := TSQLTransaction.Create(nil);
-  FQuery := TSQLQuery.Create(nil);
-
   {$ifopt D+}
   FConnection.DatabaseName := 'payments_db';
   FConnection.HostName := 'localhost';
@@ -50,40 +54,70 @@ begin
   FConnection.Password := 'postgres';
   {$endif}
 
+  FTransaction := TSQLTransaction.Create(nil);
+
   FConnection.Transaction := FTransaction;
   FTransaction.DataBase := FConnection;
 
+  FQuery := TSQLQuery.Create(nil);
   FQuery.DataBase := FConnection;
   FQuery.Transaction := FTransaction;
+
+  FQryDelete := TSQLQuery.Create(nil);
+  FQryDelete.DataBase := FConnection;
+  FQryDelete.Transaction := FTransaction;
+
+  FConnection.Open;
+
+  FSavePaymentCommand := '';
 end;
 
 destructor TPaymentRepository.Destroy;
 begin
   FQuery.Free;
+  FQryDelete.Free;
   FTransaction.Free;
   FConnection.Free;
   inherited Destroy;
 end;
 
-procedure TPaymentRepository.SavePayment(APayment: TPayment; ARequestedAt: TDateTime; AIsDefault: Boolean);
+procedure TPaymentRepository.PrepareSavePayment(APayment: TPayment; ARequestedAt: TDateTime; AIsDefault: Boolean);
+begin
+  FSavePaymentCommand := Format(
+    'INSERT INTO payments ' +
+    '  (correlation_id, amount, processed_at, default_processor) ' +
+    'VALUES ' +
+    '  (''%s'', %.2f, ''%s'', %s) ',
+    [APayment.CorrelationId, APayment.Amount, DateTimeToISO8601(ARequestedAt), BoolToStr(AIsDefault, 'true', 'false')]
+  );
+end;
+
+procedure TPaymentRepository.ExecuteSavePayment;
 begin
   try
-    if not FConnection.Connected then
-      FConnection.Open;
-
     FTransaction.StartTransaction;
 
-    FQuery.SQL.Text :=
-      'INSERT INTO payments ' +
-      '  (correlation_id, amount, processed_at, default_processor) ' +
-      'VALUES ' +
-      '  (:correlation_id, :amount, :processed_at, :default_processor) ';
-    FQuery.ParamByName('correlation_id').AsString := APayment.CorrelationId;
-    FQuery.ParamByName('amount').AsCurrency := APayment.Amount;
-    FQuery.ParamByName('processed_at').AsDateTime := ARequestedAt;
-    FQuery.ParamByName('default_processor').AsBoolean := AIsDefault;
+    FConnection.ExecuteDirect(FSavePaymentCommand, FTransaction);
 
-    FQuery.ExecSQL;
+    FTransaction.Commit;
+  except
+    on E: Exception do
+    begin
+      FTransaction.Rollback;
+      raise;
+    end;
+  end;
+end;
+
+procedure TPaymentRepository.DeletePayments;
+begin
+  try
+    FTransaction.StartTransaction;
+
+    FQryDelete.SQL.Text :=
+      'DELETE FROM payments';
+    FQryDelete.ExecSQL;
+
     FTransaction.Commit;
   except
     on E: Exception do
@@ -105,9 +139,6 @@ begin
   FallbackAmount := 0.0;
 
   try
-    if not FConnection.Connected then
-      FConnection.Open;
-
     FTransaction.StartTransaction;
 
     FQuery.SQL.Text :=
