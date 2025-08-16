@@ -21,16 +21,12 @@ type
     FConnection: TPQConnection;
     FTransaction: TSQLTransaction;
     FQuery: TSQLQuery;
-    FQryDelete: TSQLQuery;
-
     FSavePaymentCommand: String;
   public
     constructor Create;
     destructor Destroy; override;
-
     procedure PrepareSavePayment(APayment: TPayment; ARequestedAt: TDateTime; AIsDefault: Boolean);
     procedure ExecuteSavePayment;
-
     procedure DeletePayments;
     function GetSummary(AStartDate, AEndDate: TDateTime): string;
   end;
@@ -56,16 +52,12 @@ begin
 
   FTransaction := TSQLTransaction.Create(nil);
 
-  FConnection.Transaction := FTransaction;
+  //FConnection.Transaction := FTransaction;
   FTransaction.DataBase := FConnection;
 
   FQuery := TSQLQuery.Create(nil);
   FQuery.DataBase := FConnection;
   FQuery.Transaction := FTransaction;
-
-  FQryDelete := TSQLQuery.Create(nil);
-  FQryDelete.DataBase := FConnection;
-  FQryDelete.Transaction := FTransaction;
 
   FConnection.Open;
 
@@ -75,7 +67,6 @@ end;
 destructor TPaymentRepository.Destroy;
 begin
   FQuery.Free;
-  FQryDelete.Free;
   FTransaction.Free;
   FConnection.Free;
   inherited Destroy;
@@ -96,9 +87,7 @@ procedure TPaymentRepository.ExecuteSavePayment;
 begin
   try
     FTransaction.StartTransaction;
-
     FConnection.ExecuteDirect(FSavePaymentCommand, FTransaction);
-
     FTransaction.Commit;
   except
     on E: Exception do
@@ -113,11 +102,7 @@ procedure TPaymentRepository.DeletePayments;
 begin
   try
     FTransaction.StartTransaction;
-
-    FQryDelete.SQL.Text :=
-      'DELETE FROM payments';
-    FQryDelete.ExecSQL;
-
+    FConnection.ExecuteDirect('DELETE FROM payments', FTransaction);
     FTransaction.Commit;
   except
     on E: Exception do
@@ -137,10 +122,8 @@ begin
   FallbackCount := 0;
   DefaultAmount := 0.0;
   FallbackAmount := 0.0;
-
   try
     FTransaction.StartTransaction;
-
     FQuery.SQL.Text :=
       'SELECT default_processor, COUNT(*) as total_requests, COALESCE(SUM(amount), 0) as total_amount ' +
       'FROM payments ' +
@@ -149,7 +132,6 @@ begin
     FQuery.ParamByName('start_date').AsDateTime := AStartDate;
     FQuery.ParamByName('end_date').AsDateTime := AEndDate;
     FQuery.Open;
-
     while not FQuery.EOF do
     begin
       if  FQuery.FieldByName('default_processor').AsBoolean then
@@ -162,11 +144,9 @@ begin
         FallbackCount := FQuery.FieldByName('total_requests').AsInteger;
         FallbackAmount := FQuery.FieldByName('total_amount').AsCurrency;
       end;
-
       FQuery.Next;
     end;
     FQuery.Close;
-
     FTransaction.Commit;
   except
     on E: Exception do
@@ -175,7 +155,6 @@ begin
       raise;
     end;
   end;
-
   Result := Format(
     '{"default":{"totalRequests":%d,"totalAmount":%.2f},"fallback":{"totalRequests":%d,"totalAmount":%.2f}}',
     [DefaultCount, DefaultAmount, FallbackCount, FallbackAmount]
