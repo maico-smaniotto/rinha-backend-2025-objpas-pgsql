@@ -30,7 +30,8 @@ type
 implementation
 
 uses
-  Payments.Data;
+  Payments.Data,
+  DateUtils;
 
 constructor TPaymentWorkerThread.Create(AMyQueue: TPaymentQueue; AGiveBackQueue: TPaymentQueue; AIsDefault: Boolean);
 begin
@@ -94,7 +95,7 @@ begin
       end;
 
       try
-        RequestedAt := Now;
+        RequestedAt := LocalTimeToUniversal(Now);
         Request := PaymentPtr^.ToJson(RequestedAt);
 
         Client.RequestBody := TRawByteStringStream.Create(Request);

@@ -20,7 +20,7 @@ type
     procedure InitializeRoutes;
     procedure GetSummary(ARequest: TRequest; AResponse: TResponse);
     procedure PostPayment(ARequest: TRequest; AResponse: TResponse);
-    procedure PostClear(ARequest: TRequest; AResponse: TResponse);
+    procedure PostPurge(ARequest: TRequest; AResponse: TResponse);
   protected
     procedure DoRun; override;
   public
@@ -36,7 +36,7 @@ procedure TPaymentsApp.InitializeRoutes;
 begin
   HTTPRouter.RegisterRoute('/payments', rmPost, @PostPayment);
   HTTPRouter.RegisterRoute('/payments-summary', rmGet, @GetSummary);
-  HTTPRouter.RegisterRoute('/payments-clear', rmPost, @PostClear);
+  HTTPRouter.RegisterRoute('/purge-payments', rmPost, @PostPurge);
 end;
 
 procedure TPaymentsApp.GetSummary(ARequest: TRequest; AResponse: TResponse);
@@ -52,7 +52,7 @@ begin
   AResponse.Code := 202;
 end;
 
-procedure TPaymentsApp.PostClear(ARequest: TRequest; AResponse: TResponse);
+procedure TPaymentsApp.PostPurge(ARequest: TRequest; AResponse: TResponse);
 begin
   FPaymentsService.DeletePayments;
   AResponse.Code := 200;
