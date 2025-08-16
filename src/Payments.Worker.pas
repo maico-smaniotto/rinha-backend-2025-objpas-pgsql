@@ -83,6 +83,7 @@ begin
   Client := TFPHTTPClient.Create(nil);
   try
     Client.AddHeader('Content-Type', 'application/json');
+    Client.ConnectTimeout := 1;
 
     while not Terminated do
     begin
@@ -94,7 +95,6 @@ begin
 
       try
         RequestedAt := Now;
-
         Request := PaymentPtr^.ToJson(RequestedAt);
 
         Client.RequestBody := TRawByteStringStream.Create(Request);
